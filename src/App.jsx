@@ -1,32 +1,68 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
 import './App.css';
-import { KILLERS_RU, MAPS, MUTATORS, PERKS_META, PERKS_ALL } from './gameData';
+import { KILLERS_RU, MAPS, MUTATORS, PERKS_META, PERKS_ALL, ADDON_RARITIES } from './gameData';
 
-// --- ЗВУК ТИКАНЬЯ (Base64 короткий клик) ---
-const playTick = () => {
-  const audio = new Audio("data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU"); // Очень короткий пустой звук, просто триггер, лучше синтез:
-  
-  // Лучше используем Web Audio API для генерации клика без загрузки файлов
-  const ctx = new (window.AudioContext || window.webkitAudioContext)();
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
-  
-  osc.type = 'triangle';
-  osc.frequency.setValueAtTime(150, ctx.currentTime);
-  osc.frequency.exponentialRampToValueAtTime(40, ctx.currentTime + 0.05);
-  
-  gain.gain.setValueAtTime(0.1, ctx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.05);
-  
-  osc.connect(gain);
-  gain.connect(ctx.destination);
-  
-  osc.start();
-  osc.stop(ctx.currentTime + 0.05);
+// --- ЗВУКОВОЙ ДВИЖОК ---
+const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+let audioCtx = null;
+
+const initAudio = () => {
+  if (!audioCtx) {
+    audioCtx = new AudioContextClass();
+  }
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
 };
 
+const playTick = () => {
+  if (!audioCtx) return;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(800, audioCtx.currentTime); 
+  osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.04);
+  gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.04);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start();
+  osc.stop(audioCtx.currentTime + 0.05);
+};
+
+// --- БРОНЕБОЙНОЕ КОДИРОВАНИЕ ССЫЛОК (UTF-8 SAFE) ---
+// Этот метод гарантирует, что русские буквы не сломают Base64
+const encodeData = (data) => {
+  try {
+    const json = JSON.stringify(data);
+    // Преобразуем UTF-8 в байты, понятные для btoa
+    const safeString = encodeURIComponent(json).replace(/%([0-9A-F]{2})/g,
+        function toSolidBytes(match, p1) {
+            return String.fromCharCode('0x' + p1);
+    });
+    return btoa(safeString);
+  } catch (e) {
+    console.error("Encode error:", e);
+    return "";
+  }
+};
+
+const decodeData = (str) => {
+  try {
+    // Восстанавливаем из байтов обратно в UTF-8
+    const originalString = atob(str).split('').map(function(c) {
+        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+    }).join('');
+    return JSON.parse(decodeURIComponent(originalString));
+  } catch (e) {
+    console.error("Decode error:", e);
+    return null;
+  }
+};
+
+// --- КОМПОНЕНТ КОЛЕСА ---
 const WheelSegment = ({ index, total, player }) => {
   const angle = 360 / total;
   const rotate = angle * index;
@@ -56,31 +92,173 @@ const WheelSegment = ({ index, total, player }) => {
   );
 };
 
+// --- КОМПОНЕНТ ОТОБРАЖЕНИЯ РЕЗУЛЬТАТА ---
+const ResultContent = ({ data, isStreamerMode = false }) => {
+  const [perksHidden, setPerksHidden] = useState(isStreamerMode);
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  const copyLink = () => {
+    // Генерируем "сырую" Base64 строку
+    const rawCode = encodeData(data);
+    // ВАЖНО: Оборачиваем в encodeURIComponent, чтобы браузер не ломал символы +, /, =
+    const safeUrlParam = encodeURIComponent(rawCode);
+    
+    const url = `${window.location.origin}${window.location.pathname}?data=${safeUrlParam}`;
+    
+    navigator.clipboard.writeText(url).then(() => {
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    });
+  };
+
+  if (!data) return <div>Данные повреждены</div>;
+
+  return (
+    <div className="winner-content">
+      <div className="winner-main">
+        {/* Показываем номер жертвы только если это не просмотр истории */}
+        {isStreamerMode && data.roundNum && <div className="winner-label">ЖЕРТВА СУДЬБЫ #{data.roundNum}</div>}
+        <div className="winner-name">{data.p.name}</div>
+        <div className="killer-display">{data.k}</div>
+      </div>
+
+      {(data.perks || data.map || data.mutator || data.addons) && (
+        <div className="extra-info">
+          {data.map && (
+             <div className="extra-block map-block">
+               <span>КАРТА</span>
+               <div>{data.map}</div>
+             </div>
+          )}
+          
+          {data.mutator && (
+             <div className="extra-block mutator-block">
+               <span>УСЛОВИЕ</span>
+               <div>{data.mutator}</div>
+             </div>
+          )}
+
+          {data.addons && (
+             <div className="extra-block addons-block">
+                <span>АДДОНЫ</span>
+                <div className="addons-row">
+                   <div className="addon-badge">{data.addons[0]}</div>
+                   <div className="plus">+</div>
+                   <div className="addon-badge">{data.addons[1]}</div>
+                </div>
+             </div>
+          )}
+          
+          {data.perks && (
+            <div className="perks-container">
+              <div className="perks-header">
+                <span className="perks-title">ПЕРКИ</span>
+                {/* Глазик только для стримера или если хотим скрыть */}
+                {isStreamerMode && (
+                  <button className="toggle-eye-btn" onClick={() => setPerksHidden(!perksHidden)} title="Показать/Скрыть">
+                    {perksHidden ? (
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                    ) : (
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                    )}
+                  </button>
+                )}
+              </div>
+              <div className={`perks-grid ${perksHidden ? 'blurred' : ''}`}>
+                  {data.perks.map((perk, i) => (
+                    <div key={i} className="perk-card">{perk}</div>
+                  ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {isStreamerMode && (
+        <button className="share-link-btn" onClick={copyLink}>
+          {linkCopied ? "СКОПИРОВАНО!" : "🔗 ССЫЛКА ДЛЯ ИГРОКА"}
+        </button>
+      )}
+    </div>
+  );
+};
+
+
 const App = () => {
-  // --- STATE ---
+  // --- PLAYER VIEW MODE CHECK ---
+  const [playerData, setPlayerData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const dataStr = params.get('data');
+    if (dataStr) {
+      // Пытаемся декодировать
+      const decoded = decodeData(dataStr);
+      if (decoded) {
+        setPlayerData(decoded);
+      } else {
+        alert("Ошибка ссылки: Не удалось расшифровать данные. Попросите хоста скопировать ссылку заново.");
+      }
+    }
+    setLoading(false);
+  }, []);
+
+  // РЕЖИМ ПРОСМОТРА (ДЛЯ ИГРОКА)
+  // Тут нет истории, нет колеса, только карточка с заданием
+  if (playerData) {
+    return (
+      <>
+        <div className="bg-noise"></div>
+        <div className="player-view-container">
+          <motion.div 
+            className="winner-box glass-card player-view-card"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <h2 style={{textAlign: 'center', marginBottom: 20, fontSize: '0.9rem', color: '#888', letterSpacing: '2px'}}>ВАША ЗАДАЧА</h2>
+            <ResultContent data={playerData} isStreamerMode={false} />
+            <a href="/" className="reset-btn" style={{display:'block', textAlign:'center', marginTop: 30, textDecoration:'none'}}>
+              Открыть свой рандомайзер
+            </a>
+          </motion.div>
+        </div>
+      </>
+    );
+  }
+  
+  // Если просто загрузка и есть параметр, но еще не распарсили
+  if (loading && window.location.search.includes('data=')) {
+     return <div className="bg-noise"></div>;
+  }
+
+  // --- STANDARD APP MODE (ДЛЯ ХОСТА) ---
   const [players, setPlayers] = useState(() => {
     const saved = localStorage.getItem('dbd-randomizer-players');
     return saved ? JSON.parse(saved) : Array.from({ length: 4 }, (_, i) => ({
       id: Date.now() + i,
-      name: `Player ${i + 1}`,
+      name: `Игрок ${i + 1}`,
       killers: [...KILLERS_RU],
       hasPlayed: false
     }));
   });
 
   const [settings, setSettings] = useState({
-    elimination: true, // По умолчанию включено
-    perks: false,
-    perksMode: 'meta', // 'meta' or 'hardcore'
-    maps: false,
-    mutators: false
+    elimination: true,
+    perks: true,
+    perksMode: 'meta',
+    maps: true,
+    mutators: false,
+    addons: true
   });
 
+  const [history, setHistory] = useState([]); 
   const [isSpinning, setIsSpinning] = useState(false);
   const [winner, setWinner] = useState(null);
   const [rotation, setRotation] = useState(0);
+  const [editingPlayerId, setEditingPlayerId] = useState(null);
+  const [viewHistoryItem, setViewHistoryItem] = useState(null);
 
-  // Список тех, кто сейчас на колесе
   const activePlayers = useMemo(() => {
     if (settings.elimination) {
       return players.filter(p => !p.hasPlayed);
@@ -88,7 +266,6 @@ const App = () => {
     return players;
   }, [players, settings.elimination]);
 
-  // --- EFFECTS ---
   useEffect(() => {
     localStorage.setItem('dbd-randomizer-players', JSON.stringify(players));
   }, [players]);
@@ -109,6 +286,7 @@ const App = () => {
 
   const resetElimination = () => {
     setPlayers(prev => prev.map(p => ({ ...p, hasPlayed: false })));
+    setHistory([]);
   };
 
   const toggleSetting = (key) => {
@@ -118,23 +296,21 @@ const App = () => {
   const spin = () => {
     if (isSpinning || activePlayers.length === 0) return;
     
+    initAudio();
     setIsSpinning(true);
     setWinner(null);
 
-    // Звуковой эффект тиканья
     let ticks = 0;
     const totalTime = 5000;
+    
     const interval = setInterval(() => {
       ticks++;
-      // Тикаем реже к концу
-      if (Math.random() > (ticks / 50)) {
+      if (ticks % 2 === 0 || Math.random() > 0.6) {
         playTick();
       }
     }, 100);
 
     const spins = 5 + Math.random() * 5;
-    const segmentAngle = 360 / activePlayers.length;
-    // Добавляем рандом, чтобы стрелка попадала в центр сектора +/-
     const randomOffset = Math.random() * 360; 
     const newRotation = rotation + (spins * 360) + randomOffset;
     
@@ -156,33 +332,43 @@ const App = () => {
     const index = Math.floor(effectiveAngle / segmentSize);
     const winPlayer = activePlayers[index];
 
-    // Выбираем маньяка
     const pool = winPlayer.killers.length ? winPlayer.killers : ["Нет маньяков"];
     const winKiller = pool[Math.floor(Math.random() * pool.length)];
 
-    // Генерируем доп. контент
-    let extraData = {};
+    let result = { 
+      id: Date.now(),
+      roundNum: history.length + 1,
+      p: winPlayer, 
+      k: winKiller,
+      timestamp: new Date().toLocaleTimeString().slice(0, 5)
+    };
     
     if (settings.perks) {
       const source = settings.perksMode === 'meta' ? PERKS_META : PERKS_ALL;
-      // Shuffle and take 4
-      extraData.perks = [...source].sort(() => 0.5 - Math.random()).slice(0, 4);
+      const shuffled = [...new Set(source)].sort(() => 0.5 - Math.random());
+      result.perks = shuffled.slice(0, 4);
+    }
+    
+    if (settings.addons) {
+      const r1 = ADDON_RARITIES[Math.floor(Math.random() * ADDON_RARITIES.length)];
+      const r2 = ADDON_RARITIES[Math.floor(Math.random() * ADDON_RARITIES.length)];
+      result.addons = [r1, r2];
     }
     
     if (settings.maps) {
-      extraData.map = MAPS[Math.floor(Math.random() * MAPS.length)];
+      result.map = MAPS[Math.floor(Math.random() * MAPS.length)];
     }
 
     if (settings.mutators) {
-      extraData.mutator = MUTATORS[Math.floor(Math.random() * MUTATORS.length)];
+      result.mutator = MUTATORS[Math.floor(Math.random() * MUTATORS.length)];
     }
 
-    // Обновляем статус "играл"
     if (settings.elimination) {
       setPlayers(prev => prev.map(p => p.id === winPlayer.id ? { ...p, hasPlayed: true } : p));
     }
 
-    setWinner({ p: winPlayer, k: winKiller, ...extraData });
+    setWinner(result);
+    setHistory(prev => [...prev, result]);
     
     confetti({
       particleCount: 250,
@@ -196,10 +382,24 @@ const App = () => {
     setPlayers(prev => prev.map(p => p.id === id ? { ...p, name: val } : p));
   };
 
-  const toggleAllKillers = (pId) => {
+  const toggleKillerForPlayer = (playerId, killerName) => {
     setPlayers(prev => prev.map(p => {
-      if (p.id !== pId) return p;
-      return { ...p, killers: p.killers.length === KILLERS_RU.length ? [] : [...KILLERS_RU] };
+      if (p.id !== playerId) return p;
+      const hasKiller = p.killers.includes(killerName);
+      let newKillers;
+      if (hasKiller) {
+        newKillers = p.killers.filter(k => k !== killerName);
+      } else {
+        newKillers = [...p.killers, killerName];
+      }
+      return { ...p, killers: newKillers };
+    }));
+  };
+
+  const toggleAllKillers = (playerId, enable) => {
+    setPlayers(prev => prev.map(p => {
+      if (p.id !== playerId) return p;
+      return { ...p, killers: enable ? [...KILLERS_RU] : [] };
     }));
   };
 
@@ -207,8 +407,25 @@ const App = () => {
     <>
       <div className="bg-noise"></div>
       
+      {/* SIDEBAR HISTORY */}
+      <div className="history-sidebar glass-card">
+        <h3>КРУГ ИСТОРИИ</h3>
+        <div className="history-list">
+          {history.length === 0 && <div className="history-empty">Пока никого...</div>}
+          {history.map((h) => (
+            <div key={h.id} className="history-item" onClick={() => setViewHistoryItem(h)}>
+              <span className="h-num">#{h.roundNum}</span>
+              <div className="h-info">
+                <span className="h-name">{h.p.name}</span>
+                <span className="h-killer">{h.k}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="app-container">
-        <h1>DBD <span>RANDOMIZER</span></h1>
+        <h1>DBD <span>RANDOMIZER</span> <span style={{fontSize: '1rem', verticalAlign: 'middle', opacity: 0.5}}>v9.3.0</span></h1>
 
         {/* SETTINGS PANEL */}
         <div className="settings-panel glass-card">
@@ -216,10 +433,10 @@ const App = () => {
             <label className="switch-label">
               <input type="checkbox" checked={settings.elimination} onChange={() => toggleSetting('elimination')} />
               <span className="slider round"></span>
-              <span className="label-text">На выбывание</span>
+              <span className="label-text">Выбывание</span>
             </label>
             {settings.elimination && activePlayers.length < players.length && (
-              <button className="reset-btn" onClick={resetElimination}>СБРОС КРУГА ({players.length - activePlayers.length})</button>
+              <button className="reset-btn" onClick={resetElimination}>СБРОС КРУГА</button>
             )}
           </div>
           
@@ -234,12 +451,19 @@ const App = () => {
             {settings.perks && (
                <button 
                  className="mode-btn" 
-                 onClick={() => setSettings(s => ({...s, perksMode: s.perksMode === 'meta' ? 'hardcore' : 'meta'}))}
+                 onClick={() => setSettings(s => ({...s, perksMode: s.perksMode === 'meta' ? 'chaos' : 'meta'}))}
                >
                  {settings.perksMode === 'meta' ? 'META' : 'CHAOS'}
                </button>
             )}
+            <label className="switch-label">
+              <input type="checkbox" checked={settings.addons} onChange={() => toggleSetting('addons')} />
+              <span className="slider round"></span>
+              <span className="label-text">Аддоны</span>
+            </label>
           </div>
+
+          <div className="divider"></div>
 
           <div className="setting-group">
              <label className="switch-label">
@@ -255,7 +479,7 @@ const App = () => {
           </div>
         </div>
 
-        {/* WHEEL AREA */}
+        {/* WHEEL */}
         <div className="wheel-stage">
           <div className="wheel-glow"></div>
           <svg className="wheel-pointer" width="40" height="40" viewBox="0 0 40 40" style={{ zIndex: 10 }}>
@@ -281,7 +505,7 @@ const App = () => {
           ) : (
             <div className="empty-wheel">
               <p>ВСЕ СЫГРАЛИ!</p>
-              <button onClick={resetElimination}>НОВЫЙ КРУГ</button>
+              <button className="reset-btn-large" onClick={resetElimination}>НОВЫЙ КРУГ</button>
             </div>
           )}
         </div>
@@ -308,27 +532,75 @@ const App = () => {
                   value={p.name} 
                   onChange={(e) => handleNameChange(p.id, e.target.value)}
                 />
-                <div className="header-actions">
-                  <button className="action-btn" onClick={() => toggleAllKillers(p.id)}>
-                    {p.killers.length === KILLERS_RU.length ? "CLEAR" : "ALL"}
-                  </button>
-                  <button className="delete-x" onClick={() => removePlayer(p.id)}>×</button>
+                <button className="delete-x" onClick={() => removePlayer(p.id)}>×</button>
+              </div>
+              
+              {p.hasPlayed && <div className="played-badge">УЖЕ БЫЛ</div>}
+              
+              <div className="killer-section">
+                <div className="killer-count-row">
+                    <span>Маньяков: <strong>{p.killers.length}</strong></span>
+                    <button className="edit-killers-btn" onClick={() => setEditingPlayerId(p.id)}>
+                        ⚙️ Настроить
+                    </button>
                 </div>
               </div>
-              {p.hasPlayed && <div className="played-badge">УЖЕ БЫЛ</div>}
-              <div className="killer-count">KILLERS ({p.killers.length})</div>
             </motion.div>
           ))}
         </div>
       </div>
 
-      {/* WINNER MODAL */}
+      {/* MODAL: KILLER SELECTOR */}
       <AnimatePresence>
-        {winner && (
+        {editingPlayerId && (
+            <motion.div 
+                className="overlay"
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                onClick={() => setEditingPlayerId(null)}
+            >
+                <motion.div 
+                    className="settings-modal glass-card"
+                    initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                    onClick={e => e.stopPropagation()}
+                >
+                    {(() => {
+                        const p = players.find(pl => pl.id === editingPlayerId);
+                        if (!p) return null;
+                        return (
+                            <>
+                                <h2>Пул маньяков: {p.name}</h2>
+                                <div className="modal-actions">
+                                    <button className="action-btn" onClick={() => toggleAllKillers(p.id, true)}>Выбрать всех</button>
+                                    <button className="action-btn" onClick={() => toggleAllKillers(p.id, false)}>Убрать всех</button>
+                                </div>
+                                <div className="killers-grid">
+                                    {KILLERS_RU.map(killer => (
+                                        <label key={killer} className={`killer-checkbox ${p.killers.includes(killer) ? 'active' : ''}`}>
+                                            <input 
+                                                type="checkbox" 
+                                                checked={p.killers.includes(killer)}
+                                                onChange={() => toggleKillerForPlayer(p.id, killer)}
+                                            />
+                                            {killer}
+                                        </label>
+                                    ))}
+                                </div>
+                                <button className="spin-btn close-btn-small" onClick={() => setEditingPlayerId(null)}>ГОТОВО</button>
+                            </>
+                        );
+                    })()}
+                </motion.div>
+            </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL: WINNER / HISTORY VIEW */}
+      <AnimatePresence>
+        {(winner || viewHistoryItem) && (
           <motion.div 
             className="overlay"
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            onClick={() => setWinner(null)}
+            onClick={() => { setWinner(null); setViewHistoryItem(null); }}
           >
             <motion.div 
               className="winner-box glass-card"
@@ -336,39 +608,12 @@ const App = () => {
               animate={{ scale: 1, opacity: 1, y: 0 }}
               onClick={e => e.stopPropagation()}
             >
-              <div className="winner-content">
-                <div className="winner-main">
-                  <div className="winner-label">ЖЕРТВА СУДЬБЫ</div>
-                  <div className="winner-name">{winner.p.name}</div>
-                  <div className="killer-display">{winner.k}</div>
-                </div>
-
-                {(winner.perks || winner.map || winner.mutator) && (
-                  <div className="extra-info">
-                    {winner.map && (
-                       <div className="extra-block map-block">
-                         <span>REALM</span>
-                         <div>{winner.map}</div>
-                       </div>
-                    )}
-                    {winner.mutator && (
-                       <div className="extra-block mutator-block">
-                         <span>CONDITION</span>
-                         <div>{winner.mutator}</div>
-                       </div>
-                    )}
-                    {winner.perks && (
-                      <div className="perks-grid">
-                        {winner.perks.map(perk => (
-                          <div key={perk} className="perk-card">{perk}</div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+              <ResultContent 
+                data={winner || viewHistoryItem} 
+                isStreamerMode={true} 
+              />
               
-              <button className="spin-btn close-btn" onClick={() => setWinner(null)}>
+              <button className="spin-btn close-btn" onClick={() => { setWinner(null); setViewHistoryItem(null); }}>
                 ПРИНЯТЬ
               </button>
             </motion.div>

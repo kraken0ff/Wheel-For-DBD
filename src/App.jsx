@@ -4,7 +4,6 @@ import confetti from 'canvas-confetti';
 import './App.css';
 import { KILLERS_RU, MAPS, MUTATORS, PERKS_META, PERKS_ALL, ADDON_RARITIES } from './gameData';
 
-// --- ЗВУКОВОЙ ДВИЖОК ---
 const AudioContextClass = window.AudioContext || window.webkitAudioContext;
 let audioCtx = null;
 
@@ -32,12 +31,9 @@ const playTick = () => {
   osc.stop(audioCtx.currentTime + 0.05);
 };
 
-// --- БРОНЕБОЙНОЕ КОДИРОВАНИЕ ССЫЛОК (UTF-8 SAFE) ---
-// Этот метод гарантирует, что русские буквы не сломают Base64
 const encodeData = (data) => {
   try {
     const json = JSON.stringify(data);
-    // Преобразуем UTF-8 в байты, понятные для btoa
     const safeString = encodeURIComponent(json).replace(/%([0-9A-F]{2})/g,
         function toSolidBytes(match, p1) {
             return String.fromCharCode('0x' + p1);
@@ -51,7 +47,6 @@ const encodeData = (data) => {
 
 const decodeData = (str) => {
   try {
-    // Восстанавливаем из байтов обратно в UTF-8
     const originalString = atob(str).split('').map(function(c) {
         return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
     }).join('');
@@ -62,7 +57,6 @@ const decodeData = (str) => {
   }
 };
 
-// --- КОМПОНЕНТ КОЛЕСА ---
 const WheelSegment = ({ index, total, player }) => {
   const angle = 360 / total;
   const rotate = angle * index;
@@ -92,17 +86,13 @@ const WheelSegment = ({ index, total, player }) => {
   );
 };
 
-// --- КОМПОНЕНТ ОТОБРАЖЕНИЯ РЕЗУЛЬТАТА ---
 const ResultContent = ({ data, isStreamerMode = false }) => {
   const [perksHidden, setPerksHidden] = useState(isStreamerMode);
   const [linkCopied, setLinkCopied] = useState(false);
 
   const copyLink = () => {
-    // Генерируем "сырую" Base64 строку
     const rawCode = encodeData(data);
-    // ВАЖНО: Оборачиваем в encodeURIComponent, чтобы браузер не ломал символы +, /, =
     const safeUrlParam = encodeURIComponent(rawCode);
-    
     const url = `${window.location.origin}${window.location.pathname}?data=${safeUrlParam}`;
     
     navigator.clipboard.writeText(url).then(() => {
@@ -116,7 +106,6 @@ const ResultContent = ({ data, isStreamerMode = false }) => {
   return (
     <div className="winner-content">
       <div className="winner-main">
-        {/* Показываем номер жертвы только если это не просмотр истории */}
         {isStreamerMode && data.roundNum && <div className="winner-label">ЖЕРТВА СУДЬБЫ #{data.roundNum}</div>}
         <div className="winner-name">{data.p.name}</div>
         <div className="killer-display">{data.k}</div>
@@ -153,7 +142,6 @@ const ResultContent = ({ data, isStreamerMode = false }) => {
             <div className="perks-container">
               <div className="perks-header">
                 <span className="perks-title">ПЕРКИ</span>
-                {/* Глазик только для стримера или если хотим скрыть */}
                 {isStreamerMode && (
                   <button className="toggle-eye-btn" onClick={() => setPerksHidden(!perksHidden)} title="Показать/Скрыть">
                     {perksHidden ? (
@@ -183,9 +171,7 @@ const ResultContent = ({ data, isStreamerMode = false }) => {
   );
 };
 
-
 const App = () => {
-  // --- PLAYER VIEW MODE CHECK ---
   const [playerData, setPlayerData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -193,7 +179,6 @@ const App = () => {
     const params = new URLSearchParams(window.location.search);
     const dataStr = params.get('data');
     if (dataStr) {
-      // Пытаемся декодировать
       const decoded = decodeData(dataStr);
       if (decoded) {
         setPlayerData(decoded);
@@ -204,8 +189,6 @@ const App = () => {
     setLoading(false);
   }, []);
 
-  // РЕЖИМ ПРОСМОТРА (ДЛЯ ИГРОКА)
-  // Тут нет истории, нет колеса, только карточка с заданием
   if (playerData) {
     return (
       <>
@@ -227,12 +210,10 @@ const App = () => {
     );
   }
   
-  // Если просто загрузка и есть параметр, но еще не распарсили
   if (loading && window.location.search.includes('data=')) {
      return <div className="bg-noise"></div>;
   }
 
-  // --- STANDARD APP MODE (ДЛЯ ХОСТА) ---
   const [players, setPlayers] = useState(() => {
     const saved = localStorage.getItem('dbd-randomizer-players');
     return saved ? JSON.parse(saved) : Array.from({ length: 4 }, (_, i) => ({
@@ -270,7 +251,6 @@ const App = () => {
     localStorage.setItem('dbd-randomizer-players', JSON.stringify(players));
   }, [players]);
 
-  // --- ACTIONS ---
   const addPlayer = () => {
     setPlayers(prev => [...prev, {
       id: Date.now(),
@@ -407,7 +387,6 @@ const App = () => {
     <>
       <div className="bg-noise"></div>
       
-      {/* SIDEBAR HISTORY */}
       <div className="history-sidebar glass-card">
         <h3>КРУГ ИСТОРИИ</h3>
         <div className="history-list">
@@ -427,7 +406,6 @@ const App = () => {
       <div className="app-container">
         <h1>DBD <span>RANDOMIZER</span> <span style={{fontSize: '1rem', verticalAlign: 'middle', opacity: 0.5}}>v9.3.0</span></h1>
 
-        {/* SETTINGS PANEL */}
         <div className="settings-panel glass-card">
           <div className="setting-group">
             <label className="switch-label">
@@ -479,7 +457,6 @@ const App = () => {
           </div>
         </div>
 
-        {/* WHEEL */}
         <div className="wheel-stage">
           <div className="wheel-glow"></div>
           <svg className="wheel-pointer" width="40" height="40" viewBox="0 0 40 40" style={{ zIndex: 10 }}>
@@ -518,7 +495,6 @@ const App = () => {
            <button className="icon-btn add" onClick={addPlayer}>+</button>
         </div>
 
-        {/* PLAYER GRID */}
         <div className="grid-wrapper">
           {players.map((p) => (
             <motion.div 
@@ -550,7 +526,6 @@ const App = () => {
         </div>
       </div>
 
-      {/* MODAL: KILLER SELECTOR */}
       <AnimatePresence>
         {editingPlayerId && (
             <motion.div 
@@ -594,7 +569,6 @@ const App = () => {
         )}
       </AnimatePresence>
 
-      {/* MODAL: WINNER / HISTORY VIEW */}
       <AnimatePresence>
         {(winner || viewHistoryItem) && (
           <motion.div 

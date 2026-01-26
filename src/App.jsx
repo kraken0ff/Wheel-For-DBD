@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
 import './App.css';
-import { KILLERS_RU, MAPS, MUTATORS, PERKS_META, PERKS_ALL, ADDON_RARITIES } from './gameData';
+import { KILLERS_RU, KILLER_SLUGS, MAPS, MUTATORS, PERKS_META, PERKS_ALL, ADDON_RARITIES } from './gameData';
 
 const AudioContextClass = window.AudioContext || window.webkitAudioContext;
 let audioCtx = null;
@@ -102,12 +102,22 @@ const ResultContent = ({ data, isStreamerMode = false }) => {
   };
 
   if (!data) return <div>Данные повреждены</div>;
+  
+  const killerSlug = KILLER_SLUGS[data.k];
+  const killerImgUrl = killerSlug ? `https://cdn.nightlight.gg/img/portraits/${killerSlug}.png` : null;
 
   return (
     <div className="winner-content">
       <div className="winner-main">
         {isStreamerMode && data.roundNum && <div className="winner-label">ЖЕРТВА СУДЬБЫ #{data.roundNum}</div>}
         <div className="winner-name">{data.p.name}</div>
+        
+        {killerImgUrl && (
+          <div className="killer-portrait-container">
+            <img src={killerImgUrl} alt={data.k} className="killer-portrait" />
+          </div>
+        )}
+        
         <div className="killer-display">{data.k}</div>
       </div>
 
@@ -391,15 +401,20 @@ const App = () => {
         <h3>КРУГ ИСТОРИИ</h3>
         <div className="history-list">
           {history.length === 0 && <div className="history-empty">Пока никого...</div>}
-          {history.map((h) => (
-            <div key={h.id} className="history-item" onClick={() => setViewHistoryItem(h)}>
-              <span className="h-num">#{h.roundNum}</span>
-              <div className="h-info">
-                <span className="h-name">{h.p.name}</span>
-                <span className="h-killer">{h.k}</span>
+          {history.map((h) => {
+            const hKillerSlug = KILLER_SLUGS[h.k];
+            const hImg = hKillerSlug ? `https://cdn.nightlight.gg/img/portraits/${hKillerSlug}.png` : null;
+            return (
+              <div key={h.id} className="history-item" onClick={() => setViewHistoryItem(h)}>
+                <span className="h-num">#{h.roundNum}</span>
+                {hImg && <img src={hImg} alt="" className="h-avatar" />}
+                <div className="h-info">
+                  <span className="h-name">{h.p.name}</span>
+                  <span className="h-killer">{h.k}</span>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 

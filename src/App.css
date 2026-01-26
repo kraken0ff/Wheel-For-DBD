@@ -120,7 +120,7 @@ h1 span {
 
 .history-item {
   background: rgba(255,255,255,0.03);
-  padding: 10px;
+  padding: 8px;
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s;
@@ -137,10 +137,18 @@ h1 span {
 
 .h-num {
   font-family: var(--font-head);
-  font-size: 1.5rem;
+  font-size: 1.2rem;
   color: #444;
-  width: 30px;
+  width: 25px;
   text-align: center;
+}
+.h-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 4px;
+  object-fit: cover;
+  background: #000;
+  border: 1px solid #333;
 }
 .h-info { display: flex; flex-direction: column; }
 
@@ -382,6 +390,20 @@ input:checked + .slider::before { transform: translateX(20px); }
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   flex-shrink: 0;
+}
+
+.killer-portrait-container {
+  display: flex;
+  justify-content: center;
+  margin: 10px 0;
+}
+
+.killer-portrait {
+  width: 120px;
+  height: auto;
+  border-radius: 8px;
+  box-shadow: 0 5px 20px rgba(0,0,0,0.5);
+  border: 1px solid #333;
 }
 
 .killer-display {

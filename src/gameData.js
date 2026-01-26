@@ -10,6 +10,48 @@ export const KILLERS_RU = [
   "Неведомое", "Векна (Лич)", "Дракула (Тёмный Лорд)", "Дрессировщица"
 ];
 
+// Маппинг русских имен на английские слаги для картинок (Nightlight.gg)
+export const KILLER_SLUGS = {
+  "Траппер": "the-trapper",
+  "Призрак": "the-wraith",
+  "Деревенщина": "the-hillbilly",
+  "Медсестра": "the-nurse",
+  "Охотница": "the-huntress",
+  "Тень (Майерс)": "the-shape",
+  "Ведьма": "the-hag",
+  "Доктор": "the-doctor",
+  "Каннибал (Бубба)": "the-cannibal",
+  "Кошмар (Фредди)": "the-nightmare",
+  "Свинья (Пила)": "the-pig",
+  "Клоун": "the-clown",
+  "Дух": "the-spirit",
+  "Легион": "the-legion",
+  "Чума": "the-plague",
+  "Гоустфейс": "the-ghost-face",
+  "Демогоргон": "the-demogorgon",
+  "Они": "the-oni",
+  "Стрелок": "the-deathslinger",
+  "Палач (Пирамидоголовый)": "the-executioner",
+  "Мор": "the-blight",
+  "Близнецы": "the-twins",
+  "Трюкач": "the-trickster",
+  "Немезис": "the-nemesis",
+  "Пинхед (Сенобит)": "the-cenobite",
+  "Художница": "the-artist",
+  "Онрё (Садако)": "the-onryo",
+  "Грязь": "the-dredge",
+  "Вескер": "the-mastermind",
+  "Рыцарь": "the-knight",
+  "Торговка Черепами": "the-skull-merchant",
+  "Сингулярность": "the-singularity",
+  "Ксеноморф": "the-xenomorph",
+  "Чаки": "the-good-guy",
+  "Неведомое": "the-unknown",
+  "Векна (Лич)": "the-lich",
+  "Дракула (Тёмный Лорд)": "the-dark-lord",
+  "Дрессировщица": "the-houndmaster"
+};
+
 // Карты (Основные рилмы)
 export const MAPS = [
   "Ферма Колдвинд", "Автохевен", "Поместье Макмиллан", 

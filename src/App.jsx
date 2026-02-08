@@ -419,7 +419,7 @@ const App = () => {
       </div>
 
       <div className="app-container">
-        <h1>DBD <span>RANDOMIZER</span> <span style={{fontSize: '1rem', verticalAlign: 'middle', opacity: 0.5}}>v9.3.0</span></h1>
+        <h1>DBD <span>RANDOMIZER</span> <span style={{fontSize: '1rem', verticalAlign: 'middle', opacity: 0.5}}>v9.4.1</span></h1>
 
         <div className="settings-panel glass-card">
           <div className="setting-group">

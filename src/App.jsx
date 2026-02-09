@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
 import './App.css';
-import { KILLERS_RU, KILLER_SLUGS, MAPS, MUTATORS, PERKS_META, PERKS_ALL, ADDON_RARITIES } from './gameData';
+import { KILLERS_RU, KILLER_SLUGS, MAPS, MUTATORS, PERKS_ALL, ADDON_RARITIES } from './gameData';
 
 const AudioContextClass = window.AudioContext || window.webkitAudioContext;
 let audioCtx = null;
@@ -31,16 +31,37 @@ const playTick = () => {
   osc.stop(audioCtx.currentTime + 0.05);
 };
 
+const getRarityClass = (rarityName) => {
+  if (!rarityName) return '';
+  const r = rarityName.toLowerCase();
+  if (r.includes('коричневый')) return 'rarity-brown';
+  if (r.includes('зеленый')) return 'rarity-green';
+  if (r.includes('синий')) return 'rarity-blue';
+  if (r.includes('фиолетовый')) return 'rarity-purple';
+  if (r.includes('радужный') || r.includes('iri')) return 'rarity-iri';
+  return '';
+};
+
 const encodeData = (data) => {
   try {
-    const json = JSON.stringify(data);
+    const minified = {
+      roundNum: data.roundNum,
+      p: { name: data.p.name },
+      k: data.k,
+      perks: data.perks,
+      addons: data.addons,
+      map: data.map,
+      mutator: data.mutator,
+      timestamp: data.timestamp
+    };
+
+    const json = JSON.stringify(minified);
     const safeString = encodeURIComponent(json).replace(/%([0-9A-F]{2})/g,
-        function toSolidBytes(match, p1) {
+        function (match, p1) {
             return String.fromCharCode('0x' + p1);
     });
     return btoa(safeString);
   } catch (e) {
-    console.error("Encode error:", e);
     return "";
   }
 };
@@ -52,7 +73,6 @@ const decodeData = (str) => {
     }).join('');
     return JSON.parse(decodeURIComponent(originalString));
   } catch (e) {
-    console.error("Decode error:", e);
     return null;
   }
 };
@@ -114,7 +134,12 @@ const ResultContent = ({ data, isStreamerMode = false }) => {
         
         {killerImgUrl && (
           <div className="killer-portrait-container">
-            <img src={killerImgUrl} alt={data.k} className="killer-portrait" />
+            <img 
+                src={killerImgUrl} 
+                alt={data.k} 
+                className="killer-portrait" 
+                onError={(e) => {e.target.style.display='none'}} 
+            />
           </div>
         )}
         
@@ -141,9 +166,13 @@ const ResultContent = ({ data, isStreamerMode = false }) => {
              <div className="extra-block addons-block">
                 <span>АДДОНЫ</span>
                 <div className="addons-row">
-                   <div className="addon-badge">{data.addons[0]}</div>
+                   <div className={`addon-badge ${getRarityClass(data.addons[0])}`}>
+                      {data.addons[0]}
+                   </div>
                    <div className="plus">+</div>
-                   <div className="addon-badge">{data.addons[1]}</div>
+                   <div className={`addon-badge ${getRarityClass(data.addons[1])}`}>
+                      {data.addons[1]}
+                   </div>
                 </div>
              </div>
           )}
@@ -193,7 +222,7 @@ const App = () => {
       if (decoded) {
         setPlayerData(decoded);
       } else {
-        alert("Ошибка ссылки: Не удалось расшифровать данные. Попросите хоста скопировать ссылку заново.");
+        alert("Ошибка ссылки: Не удалось расшифровать данные.");
       }
     }
     setLoading(false);
@@ -237,7 +266,6 @@ const App = () => {
   const [settings, setSettings] = useState({
     elimination: true,
     perks: true,
-    perksMode: 'meta',
     maps: true,
     mutators: false,
     addons: true
@@ -334,7 +362,7 @@ const App = () => {
     };
     
     if (settings.perks) {
-      const source = settings.perksMode === 'meta' ? PERKS_META : PERKS_ALL;
+      const source = PERKS_ALL;
       const shuffled = [...new Set(source)].sort(() => 0.5 - Math.random());
       result.perks = shuffled.slice(0, 4);
     }
@@ -407,7 +435,12 @@ const App = () => {
             return (
               <div key={h.id} className="history-item" onClick={() => setViewHistoryItem(h)}>
                 <span className="h-num">#{h.roundNum}</span>
-                {hImg && <img src={hImg} alt="" className="h-avatar" />}
+                <img 
+                    src={hImg || 'https://via.placeholder.com/40'} 
+                    alt="" 
+                    className="h-avatar" 
+                    onError={(e) => {e.target.style.display='none'}}
+                />
                 <div className="h-info">
                   <span className="h-name">{h.p.name}</span>
                   <span className="h-killer">{h.k}</span>
@@ -441,14 +474,6 @@ const App = () => {
               <span className="slider round"></span>
               <span className="label-text">Перки</span>
             </label>
-            {settings.perks && (
-               <button 
-                 className="mode-btn" 
-                 onClick={() => setSettings(s => ({...s, perksMode: s.perksMode === 'meta' ? 'chaos' : 'meta'}))}
-               >
-                 {settings.perksMode === 'meta' ? 'META' : 'CHAOS'}
-               </button>
-            )}
             <label className="switch-label">
               <input type="checkbox" checked={settings.addons} onChange={() => toggleSetting('addons')} />
               <span className="slider round"></span>
